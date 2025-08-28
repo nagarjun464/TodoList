@@ -1,0 +1,117 @@
+﻿@page "/todo"
+@using TodoListFirebaseApp.Models
+@inject HttpClient Http
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+
+<h3 class="mb-4">📝 Todo List</h3>
+
+<div class="mb-4">
+    <input class="form-control mb-2" placeholder="Enter Unique Id String" @bind="newTodo.Id" />
+    <input class="form-control mb-2" placeholder="Title" @bind="newTodo.Title" />
+    <input class="form-control mb-2" placeholder="Description" @bind="newTodo.Description" />
+    <button class="btn btn-primary" @onclick="CreateTodo">Add Task</button>
+</div>
+
+<table class="table table-bordered table-hover">
+    <thead class="thead-dark">
+        <tr>
+            <th>Done</th>
+            <th>Title</th>
+            <th>Description</th>
+            <th>Created</th>
+            <th>Updated</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var todo in todos)
+        {
+            <tr>
+                <td>
+                    <input type="checkbox"
+                    checked="@todo.IsCompleted"
+                    @onchange="async e => await OnCheckboxChanged(e, todo)" />
+                </td>
+                <td class="@GetTodoClass(todo)">@todo.Id</td>
+                <td class="@GetTodoClass(todo)">@todo.Title</td>
+                <td>@todo.Description</td> 
+                <td>@todo.CreatedAt.ToLocalTime().ToString("g")</td>
+                <td>@todo.UpdatedAt.ToLocalTime().ToString("g")</td>
+                <td>
+                    <button class="btn btn-sm btn-warning me-2" @onclick="() => EditTodo(todo)">Edit</button>
+                    <button class="btn btn-sm btn-danger" @onclick="() => DeleteTodo(todo.Id)">Delete</button>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+@code {
+    private List<TodoItem> todos = new();
+    private TodoItem newTodo = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTodos();
+    }
+
+    private async Task LoadTodos()
+    {
+        todos = await Http.GetFromJsonAsync<List<TodoItem>>("api/todo");
+    }
+
+    private async Task OnCheckboxChanged(ChangeEventArgs e, TodoItem todo)
+    {
+        todo.IsCompleted = (bool)e.Value;
+        await ToggleTodo(todo);
+    }
+    private async Task CreateTodo()
+    {
+        Console.WriteLine("CreateTodo() called"); // Use ILogger in production
+        newTodo.CreatedAt = DateTime.UtcNow;
+        newTodo.UpdatedAt = DateTime.UtcNow;
+
+        var response = await Http.PostAsJsonAsync("api/todo", newTodo);
+        if (response.IsSuccessStatusCode)
+        {
+            newTodo = new TodoItem(); // Clear form
+            StateHasChanged();
+            await LoadTodos();
+        }
+        else
+        {
+            Console.WriteLine("Failed to add todo: " + response.StatusCode);
+        }
+    }
+
+    private async Task ToggleTodo(TodoItem todo)
+    {
+        todo.UpdatedAt = DateTime.UtcNow;
+        await Http.PutAsJsonAsync($"api/todo/{todo.Title}", todo);
+        await LoadTodos();
+    }
+
+    private async Task EditTodo(TodoItem todo)
+    {
+        Navigation.NavigateTo($"/edit-todo/{todo.Title}");
+    }
+
+    private async Task DeleteTodo(string id)
+    {
+        var response = await Http.DeleteAsync($"api/todo/{id}");
+
+        if (response.IsSuccessStatusCode)
+        {
+            Console.WriteLine("Todo deleted successfully");
+            await LoadTodos();
+        }
+        else
+        {
+            Console.WriteLine("Failed to delete todo: " + response.StatusCode);
+        }
+    }
+
+    private string GetTodoClass(TodoItem todo) =>
+        todo.IsCompleted ? "text-success fw-bold" : "";
+}
